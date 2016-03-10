@@ -2,10 +2,8 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
@@ -31,9 +29,8 @@ const (
 
 // Commandline flags.
 var (
-	useExhibitor = flag.Bool("exporter.use_exhibitor", false, "Use Exhibitor to discover ZooKeeper servers")
-	addr         = flag.String("web.listen-address", ":9114", "Address to listen on for web interface and telemetry.")
-	metricPath   = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
+	addr       = flag.String("web.listen-address", ":9114", "Address to listen on for web interface and telemetry.")
+	metricPath = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
 )
 
 var (
@@ -100,16 +97,14 @@ var httpClient = http.Client{
 
 type exporter struct {
 	sync.Mutex
-	addrs        []string
-	useExhibitor bool
-	errors       prometheus.Counter
-	duration     prometheus.Gauge
+	addrs    []string
+	errors   prometheus.Counter
+	duration prometheus.Gauge
 }
 
-func newZooKeeperExporter(addrs []string, useExhibitor bool) *exporter {
+func newZooKeeperExporter(addrs []string) *exporter {
 	e := &exporter{
-		addrs:        addrs,
-		useExhibitor: useExhibitor,
+		addrs: addrs,
 		errors: prometheus.NewCounter(
 			prometheus.CounterOpts{
 				Namespace: "zookeeper_exporter",
@@ -157,42 +152,7 @@ func (e *exporter) scrape(ch chan<- prometheus.Metric) {
 	defer close(ch)
 
 	servers := []string{}
-
-	if e.useExhibitor {
-		url := fmt.Sprintf("http://%s/exhibitor/v1/cluster/list", e.addrs[0])
-		rr, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			panic(err)
-		}
-
-		rresp, err := httpClient.Transport.RoundTrip(rr)
-		if err != nil {
-			e.recordErr(err)
-			return
-		}
-		defer rresp.Body.Close()
-
-		body, err := ioutil.ReadAll(rresp.Body)
-		if err != nil {
-			e.recordErr(err)
-			return
-		}
-
-		var serverList Servers
-		err = json.Unmarshal(body, &serverList)
-		if err != nil {
-			e.recordErr(err)
-			return
-		}
-
-		log.Debugf("Got serverlist from Exhibitor: %s", serverList)
-
-		for _, host := range serverList.Servers {
-			servers = append(servers, fmt.Sprintf("%s:%d", host, serverList.Port))
-		}
-	} else {
-		servers = e.addrs
-	}
+	servers = e.addrs
 
 	log.Debugf("Polling servers: %s", servers)
 	var wg sync.WaitGroup
@@ -277,7 +237,7 @@ func (e *exporter) pollServer(server string, ch chan<- prometheus.Metric, wg *sy
 
 func main() {
 	flag.Parse()
-	exporter := newZooKeeperExporter(flag.Args(), *useExhibitor)
+	exporter := newZooKeeperExporter(flag.Args())
 	prometheus.MustRegister(exporter)
 
 	http.Handle(*metricPath, prometheus.Handler())
