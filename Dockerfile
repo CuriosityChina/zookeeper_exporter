@@ -1,7 +1,4 @@
-FROM kiasaki/alpine-golang
-COPY . /zookeeper_exporter
-WORKDIR /zookeeper_exporter
-RUN go get -d
-RUN go build
-EXPOSE 9114
-ENTRYPOINT ["/zookeeper_exporter/zookeeper_exporter"]
+FROM sdurrheimer/alpine-golang-make-onbuild
+MAINTAINER  Aaron Chen <lowstz@gmail.com>
+
+EXPOSE      9114
